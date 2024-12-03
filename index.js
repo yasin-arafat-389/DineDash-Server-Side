@@ -158,6 +158,18 @@ async function run() {
       }
     });
 
+    // Get Provider names and images
+    app.get("/providers", async (req, res) => {
+      const result = await providersCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get Restaurents for homepage slider
+    app.get("/restaurants", async (req, res) => {
+      const result = await restaurantsCollection.find().toArray();
+      res.send(result);
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
