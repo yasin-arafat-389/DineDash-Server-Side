@@ -201,6 +201,104 @@ async function run() {
       res.json({ regularOrders, customOrders });
     });
 
+    // Get total orders delivered for partners/restaurants overview
+    app.get("/orders-delivered/total", async (req, res) => {
+      let restaurant = req.query.name;
+
+      const totalRegularOrdersDelivered = await ordersCollection
+        .find({
+          "cartFood.restaurant": restaurant,
+          "cartFood.status": "completed",
+        })
+        .toArray();
+
+      const totalCustomOrdersDelivered = await ordersCollection
+        .find({
+          "burger.provider": restaurant,
+          "burger.status": "completed",
+        })
+        .toArray();
+
+      res.json({ totalRegularOrdersDelivered, totalCustomOrdersDelivered });
+    });
+
+    // Get total earned for partners/restaurants overview
+    app.get("/total-earned", async (req, res) => {
+      let restaurant = req.query.name;
+
+      const totalRegularOrdersDelivered = await ordersCollection
+        .find({
+          "cartFood.restaurant": restaurant,
+          "cartFood.status": "completed",
+        })
+        .toArray();
+
+      const totalCustomOrdersDelivered = await ordersCollection
+        .find({
+          "burger.provider": restaurant,
+          "burger.status": "completed",
+        })
+        .toArray();
+
+      // Calculate total earned from regular orders
+      const totalRegularEarned = totalRegularOrdersDelivered.reduce(
+        (acc, order) => {
+          // Sum the totalPrice of each burger in the burger array
+          const regularTotal = order.cartFood.reduce((acc, regularItem) => {
+            return acc + parseInt(regularItem.totalPrice);
+          }, 0);
+          // Add the sum to the accumulator
+          return acc + regularTotal;
+        },
+        0
+      );
+
+      // Calculate total earned from custom orders
+      const totalCustomEarned = totalCustomOrdersDelivered.reduce(
+        (acc, order) => {
+          // Sum the totalPrice of each burger in the burger array
+          const burgerTotal = order.burger.reduce((burgerAcc, burgerItem) => {
+            return burgerAcc + parseInt(burgerItem.totalPrice);
+          }, 0);
+          // Add the sum to the accumulator
+          return acc + burgerTotal;
+        },
+        0
+      );
+
+      const grandTotal = totalRegularEarned + totalCustomEarned;
+
+      res.json({ grandTotal });
+    });
+
+    // Get Delivery area of a rider
+    app.get("/delivery-area", async (req, res) => {
+      let name = req.query.name;
+      let result = await ridersCollection.findOne({ name: name });
+      res.send(result);
+    });
+
+    // Get all restaurants and their details fro admin overview
+    app.get("/restaurants-and-details", async (req, res) => {
+      const allRestaurants = await restaurantsCollection.find().toArray();
+
+      const restaurantsWithData = [];
+
+      for (const restaurant of allRestaurants) {
+        const foods = await foodsCollection
+          .find({ restaurant: restaurant.name })
+          .toArray();
+
+        const restaurantWithData = {
+          restaurant: restaurant,
+          foods: foods,
+        };
+        restaurantsWithData.push(restaurantWithData);
+      }
+
+      res.send(restaurantsWithData);
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
