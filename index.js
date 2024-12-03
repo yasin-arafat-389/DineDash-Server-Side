@@ -299,6 +299,42 @@ async function run() {
       res.send(restaurantsWithData);
     });
 
+    // Get all registered riders for admin overview
+    app.get("/all-registered-riders", async (req, res) => {
+      const result = await ridersCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get single restaurant data
+    app.get("/restaurantData", async (req, res) => {
+      let name = req.query.name;
+      let query = { pathname: name };
+      const result = await restaurantsCollection.findOne(query);
+      res.send(result);
+    });
+
+    // Get all food from foods collection
+    app.get("/foods", async (req, res) => {
+      const result = await foodsCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get calculated food counts for pagination
+    app.get("/foods/pagination", async (req, res) => {
+      const query = req.query;
+      const page = query.page;
+
+      const pageNumber = parseInt(page);
+      const perPage = 6;
+      const skip = pageNumber * perPage;
+
+      let foods = foodsCollection.find().skip(skip).limit(perPage);
+      let result = await foods.toArray();
+      let foodCounts = await foodsCollection.countDocuments();
+
+      res.json({ result, foodCounts });
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
