@@ -335,6 +335,56 @@ async function run() {
       res.json({ result, foodCounts });
     });
 
+    // Get single food details
+    app.get("/food/details", async (req, res) => {
+      try {
+        let id = req.query.id;
+        if (!id) {
+          return res.status(400).send({ error: "Invalid ID provided" });
+        }
+        let foodId = new ObjectId(id);
+        let result = await foodsCollection.findOne({ _id: foodId });
+        if (!result) {
+          return res.status(404).send({ error: "Food not found" });
+        }
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching food details:", error);
+        res.status(500).send({ error: "Internal server error" });
+      }
+    });
+
+    // Get foods for browse by category
+    app.get("/foods/category", async (req, res) => {
+      const category = req.query.category;
+      let foods = foodsCollection.find({ category: category });
+      let result = await foods.toArray();
+      res.send(result);
+    });
+
+    // Get foods for search result
+    app.get("/foods/search", async (req, res) => {
+      const search = req.query.search;
+      let query = {
+        name: { $regex: search, $options: "i" },
+      };
+      let result = await foodsCollection.find(query).toArray();
+
+      let noResultFound;
+      if (result.length === 0) {
+        noResultFound = "no result found";
+      }
+
+      res.json({ result, noResultFound });
+    });
+
+    // Get all restaurant specific food query by name
+    app.get("/restaurant", async (req, res) => {
+      const name = req.query.name;
+      const foods = await foodsCollection.find({ restaurant: name }).toArray();
+      res.status(200).json(foods);
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
