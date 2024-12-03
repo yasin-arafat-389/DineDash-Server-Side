@@ -385,6 +385,98 @@ async function run() {
       res.status(200).json(foods);
     });
 
+    // Insert order data to the orders collection and send email invoice (Cash On Delivery)
+    app.post("/orders", async (req, res) => {
+      let order = req.body;
+
+      await ordersCollection.insertOne(order);
+
+      res.send({ success: true });
+    });
+
+    // Insert order data to the orders collection and send email invoice (SSLCOMMERZ)
+    app.post("/orders/sslcommerz", async (req, res) => {
+      let order = req.body;
+
+      await sslcommerzCollection.insertOne(order);
+
+      let transactionId = new ObjectId().toString();
+      const data = {
+        total_amount: `${order.orderTotal}`,
+        currency: "BDT",
+        tran_id: transactionId,
+        success_url: `http://localhost:5000/payment/success/${transactionId}/${order.randString}`,
+        fail_url: `http://localhost:5000/payment/failed`,
+        cancel_url: "http://localhost:3030/cancel",
+        ipn_url: "http://localhost:3030/ipn",
+        shipping_method: "Courier",
+        product_name: "Computer.",
+        product_category: "Electronic",
+        product_profile: "general",
+        cus_name: `${order.name}`,
+        cus_email: `${order.email}`,
+        cus_add1: "Dhaka",
+        cus_add2: "Dhaka",
+        cus_city: "Dhaka",
+        cus_state: "Dhaka",
+        cus_postcode: "1000",
+        cus_country: "Bangladesh",
+        cus_phone: "01711111111",
+        cus_fax: "01711111111",
+        ship_name: "Customer Name",
+        ship_add1: "Dhaka",
+        ship_add2: "Dhaka",
+        ship_city: "Dhaka",
+        ship_state: "Dhaka",
+        ship_postcode: 1000,
+        ship_country: "Bangladesh",
+      };
+      const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
+      sslcz.init(data).then((apiResponse) => {
+        let GatewayPageURL = apiResponse.GatewayPageURL;
+        res.send({ url: GatewayPageURL });
+      });
+
+      app.post("/payment/success/:tranID/:oid", async (req, res) => {
+        let oid = req.params.oid;
+
+        let orderToCommit = await sslcommerzCollection.findOne({
+          randString: oid,
+        });
+
+        await ordersCollection.insertOne(orderToCommit);
+
+        let redirectTo;
+        if (orderToCommit.cartFood?.length > 0) {
+          redirectTo = "myOrders";
+        } else {
+          redirectTo = "customMadeBurgers";
+        }
+
+        res.redirect(`http://localhost:5173/order-success/${redirectTo}`);
+      });
+
+      app.post("/payment/failed", async (req, res) => {
+        res.redirect("http://localhost:5173/payment-cancelled");
+      });
+    });
+
+    // Update user's delivery address to the database
+    app.post("/update-address", async (req, res) => {
+      let { address, email } = req.body;
+      const result = await addressCollection.updateOne(
+        { email: email },
+        { $set: { address: address } },
+        { upsert: true }
+      );
+
+      if (result.upsertedCount > 0 || result.modifiedCount > 0) {
+        res.send({ success: true });
+      } else {
+        res.send({ success: false, message: "No changes made" });
+      }
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
