@@ -170,6 +170,37 @@ async function run() {
       res.send(result);
     });
 
+    // Get All riders for admin overview
+    app.get("/all-riders", async (req, res) => {
+      const result = await ridersCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get total orders placed for admin overview
+    app.get("/all-orders", async (req, res) => {
+      const result = await ordersCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get total orders placed for partners/restaurants overview
+    app.get("/all-orders/partner", async (req, res) => {
+      let restaurant = req.query.name;
+
+      const regularOrders = await ordersCollection
+        .find({
+          "cartFood.restaurant": restaurant,
+        })
+        .toArray();
+
+      const customOrders = await ordersCollection
+        .find({
+          "burger.provider": restaurant,
+        })
+        .toArray();
+
+      res.json({ regularOrders, customOrders });
+    });
+
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"
     );
