@@ -243,7 +243,7 @@ const sendInstruction = async (to, name) => {
               We are looking forward to seeing your business grow. Please click the link below to register your restaurant and get access to your dashboard. You must use <span class="font-semibold">${to}</span> as the email address while registering your restaurant.
             </p>
 
-            <a target='_blank' href='https://dinedash-dashboard.web.app/'>
+            <a target='_blank' href='https://dine-dash-dashboard-side.web.app/'>
             <button
             class="btn-redesign px-6 py-2 mt-4 text-sm font-medium tracking-wider text-white capitalize transition-colors duration-300 transform bg-blue-600 rounded-lg hover:bg-blue-500 focus:outline-none focus:ring focus:ring-blue-300 focus:ring-opacity-80"
             >

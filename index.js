@@ -85,6 +85,10 @@ async function run() {
     .db("DineDash-Ecom")
     .collection("followers");
 
+  const blacklistsCollection = client
+    .db("DineDash-Ecom")
+    .collection("blacklist");
+
   offersCollection.createIndex({ expiresIn: 1 }, { expireAfterSeconds: 0 });
 
   try {
@@ -407,7 +411,7 @@ async function run() {
         tran_id: transactionId,
         success_url: `http://localhost:5000/payment/success/${transactionId}/${order.randString}`,
         fail_url: `http://localhost:5000/payment/failed`,
-        cancel_url: "http://localhost:3030/cancel",
+        cancel_url: "https://dine-dash-client-side.web.app",
         ipn_url: "http://localhost:3030/ipn",
         shipping_method: "Courier",
         product_name: "Computer.",
@@ -475,6 +479,943 @@ async function run() {
       } else {
         res.send({ success: false, message: "No changes made" });
       }
+    });
+
+    // Update user's delivery address to the database
+    app.post("/update-phone", async (req, res) => {
+      let { phone, email } = req.body;
+      const result = await addressCollection.updateOne(
+        { email: email },
+        { $set: { phone: phone } },
+        { upsert: true }
+      );
+
+      if (result.upsertedCount > 0 || result.modifiedCount > 0) {
+        res.send({ success: true });
+      } else {
+        res.send({ success: false, message: "No changes made" });
+      }
+    });
+
+    // Get user's address
+    app.get("/my-address", async (req, res) => {
+      const email = req.query.email;
+      const address = await addressCollection.findOne({ email: email });
+      res.send(address);
+    });
+
+    // Get all orders of a user
+    app.get("/my-orders", async (req, res) => {
+      const email = req.query.email;
+
+      let result = await ordersCollection
+        .find({ email: email })
+        .project({
+          _id: 1,
+          cartFood: 1,
+          burger: 1,
+          date: 1,
+          status: 1,
+          order: 1,
+        })
+        .toArray();
+
+      result.sort((a, b) => b.order - a.order);
+
+      res.send(result);
+    });
+
+    // Store partner request to the database
+    app.post("/partner-request", async (req, res) => {
+      let data = req.body;
+      await partnerRequestsCollection.insertOne(data);
+      res.send({ success: true });
+    });
+
+    // Get partner request status
+    app.get("/partner-request", async (req, res) => {
+      let email = req.query.email;
+      let result = await partnerRequestsCollection.findOne({ email: email });
+      res.send(result);
+    });
+
+    // Get all partner request for admin
+    app.get("/partner-requests", async (req, res) => {
+      let result = await partnerRequestsCollection
+        .find({ status: "pending" })
+        .toArray();
+      res.send(result);
+    });
+
+    // Get user role
+    app.get("/get-role", async (req, res) => {
+      let email = req.query.email;
+      let result = await rolesCollection.findOne({ email: email });
+      res.send(result);
+    });
+
+    // Accept partner request
+    app.post("/accept/partner-request", async (req, res) => {
+      let data = req.body;
+
+      // await sendInstruction(data.email, data.name);
+
+      await partnerRequestsCollection.updateOne(
+        { email: data.email },
+        { $set: { status: "accepted" } }
+      );
+
+      let insertToRoleCollection = {
+        email: data.email,
+        role: "restaurant-handler",
+      };
+
+      await rolesCollection.insertOne(insertToRoleCollection);
+
+      res.send({ success: true });
+    });
+
+    // Reject partner request
+    app.post("/reject/partner-request", async (req, res) => {
+      let email = req.body.email;
+      let name = req.body.name;
+
+      // await PartnerRequestRejected(email, name);
+
+      await partnerRequestsCollection.updateOne(
+        { email: email },
+        { $set: { status: "rejected" } }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Register a restaurant
+    app.post("/register-restaurant", async (req, res) => {
+      let data = req.body;
+
+      let insertToRestaurantsCollection = {
+        name: data.restaurantName,
+        thumbnail: data.thumbnail,
+        pathname: data.restaurantName.toLowerCase().replace(/\s+/g, "-"),
+      };
+
+      await restaurantsCollection.insertOne(insertToRestaurantsCollection);
+
+      await rolesCollection.insertOne({
+        email: data.email,
+        role: "restaurant-handler",
+      });
+
+      res.send({ success: true });
+    });
+
+    // Store rider requests to the database
+    app.post("/rider-request", async (req, res) => {
+      let data = req.body;
+      await riderRequestsCollection.insertOne(data);
+      res.send({ success: true });
+    });
+
+    // Get rider request status
+    app.get("/rider-request", async (req, res) => {
+      let email = req.query.email;
+      let result = await riderRequestsCollection.findOne({ email: email });
+      res.send(result);
+    });
+
+    // Get all rider request for admin
+    app.get("/rider-requests", async (req, res) => {
+      let result = await riderRequestsCollection
+        .find({ status: "pending" })
+        .toArray();
+      res.send(result);
+    });
+
+    // Accept rider request
+    app.post("/accept/rider-request", async (req, res) => {
+      let data = req.body;
+
+      await SendInstructionToRider(data.email, data.name);
+
+      await riderRequestsCollection.updateOne(
+        { email: data.email },
+        { $set: { status: "accepted" } }
+      );
+
+      let insertToRoleCollection = {
+        email: data.email,
+        role: "rider",
+      };
+
+      await rolesCollection.insertOne(insertToRoleCollection);
+
+      res.send({ success: true });
+    });
+
+    // Reject rider request
+    app.post("/reject/rider-request", async (req, res) => {
+      let email = req.body.email;
+      let name = req.body.name;
+
+      // await RiderRequestRejected(email, name);
+
+      await riderRequestsCollection.updateOne(
+        { email: email },
+        { $set: { status: "rejected" } }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Get rider request status
+    app.get("/rider-request-status", async (req, res) => {
+      let email = req.query.email;
+      let result = await riderRequestsCollection.findOne({ email: email });
+      res.send(result);
+    });
+
+    // Register Rider
+    app.post("/register-rider", async (req, res) => {
+      let data = req.body;
+
+      let insertToRidersCollection = {
+        name: data.name,
+        phone: data.phone,
+        region: data.region,
+        totalDelivered: 0,
+        totalEarned: 0,
+      };
+
+      await riderRequestsCollection.updateOne(
+        { email: data.email },
+        { $set: { resolved: true } }
+      );
+
+      await ridersCollection.insertOne(insertToRidersCollection);
+
+      await rolesCollection.insertOne({ email: data.email, role: "rider" });
+
+      res.send({ success: true });
+    });
+
+    // Get regular orders data for the restaurant handler
+    app.get("/orders/partner", async (req, res) => {
+      let restaurantName = req.query.name;
+
+      const filteredOrders = await ordersCollection
+        .find({
+          "cartFood.restaurant": restaurantName,
+        })
+        .project({
+          _id: 1,
+          cartFood: {
+            $filter: {
+              input: "$cartFood",
+              as: "item",
+              cond: { $eq: ["$$item.restaurant", restaurantName] },
+            },
+          },
+          name: 1,
+          address: 1,
+          phone: 1,
+          region: 1,
+          orderTotal: 1,
+          paymentMethod: 1,
+        })
+        .toArray();
+
+      res.send(filteredOrders);
+    });
+
+    // Accept regular order
+    app.post("/accept/order/regular", async (req, res) => {
+      let orderId = req.body.orderId;
+      let { name } = req.query;
+
+      let verifyIfBlacklisted = await blacklistsCollection.findOne({
+        restaurant: name,
+      });
+
+      if (verifyIfBlacklisted) {
+        return res.send({ success: false });
+      }
+
+      const acceptOrder = await ordersCollection.updateOne(
+        {
+          "cartFood.orderId": orderId,
+        },
+        {
+          $set: {
+            "cartFood.$.status": "cooking",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Deliver order to rider
+    app.post("/deliver/order/regular", async (req, res) => {
+      let orderId = req.body.orderId;
+
+      const deliverOrder = await ordersCollection.updateOne(
+        {
+          "cartFood.orderId": orderId,
+        },
+        {
+          $set: {
+            "cartFood.$.status": "completed",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Reject regular order
+    app.post("/reject/order/regular", async (req, res) => {
+      let orderId = req.body.orderId;
+
+      const rejectOrder = await ordersCollection.updateOne(
+        {
+          "cartFood.orderId": orderId,
+        },
+        {
+          $set: {
+            "cartFood.$.status": "cancelled",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Get provider status (if a restaurant provides custom burger service or not)
+    app.get("/provider/status", async (req, res) => {
+      let name = req.query.name;
+      let query = { provider: name };
+      const result = await providersCollection.findOne(query);
+      res.send(result);
+    });
+
+    // Insert custom burger provider details to the database
+    app.post("/become-provider", async (req, res) => {
+      let data = req.body;
+      const result = await providersCollection.insertOne(data);
+      res.send(result);
+    });
+
+    // Update burger ingredients price
+    app.post("/update/ingredients/price", async (req, res) => {
+      const updatedPrice = req.body.updatedPrice;
+      const providerName = req.body.provider;
+      const ingredientToUpdate = req.body.ingredientToUpdate;
+
+      await providersCollection.findOneAndUpdate(
+        { provider: providerName, "ing.name": ingredientToUpdate },
+        { $set: { "ing.$.price": parseInt(updatedPrice) } }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Get custom burger orders data for the restaurant handler
+    app.get("/custom/orders/partner", async (req, res) => {
+      let restaurantName = req.query.name;
+
+      const filteredOrders = await ordersCollection
+        .find({
+          "burger.provider": restaurantName,
+        })
+        .project({
+          _id: 1,
+          burger: {
+            $filter: {
+              input: "$burger",
+              as: "item",
+              cond: { $eq: ["$$item.provider", restaurantName] },
+            },
+          },
+          name: 1,
+          address: 1,
+          phone: 1,
+          region: 1,
+          orderTotal: 1,
+          paymentMethod: 1,
+        })
+        .toArray();
+
+      res.send(filteredOrders);
+    });
+
+    // Accept custom burger order
+    app.post("/accept/order/custom", async (req, res) => {
+      let orderId = req.body.orderId;
+
+      const acceptOrder = await ordersCollection.updateOne(
+        {
+          "burger.orderId": orderId,
+        },
+        {
+          $set: {
+            "burger.$.status": "cooking",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Reject custom burger order
+    app.post("/reject/order/custom", async (req, res) => {
+      let orderId = req.body.orderId;
+
+      let rejectOrder = await ordersCollection.updateOne(
+        {
+          "burger.orderId": orderId,
+        },
+        {
+          $set: {
+            "burger.$.status": "cancelled",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Deliver custom burger order to rider
+    app.post("/deliver/order/custom", async (req, res) => {
+      let orderId = req.body.orderId;
+
+      const deliverOrder = await ordersCollection.updateOne(
+        {
+          "burger.orderId": orderId,
+        },
+        {
+          $set: {
+            "burger.$.status": "out for delivery",
+          },
+        }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Insert new food to the database
+    app.post("/add/new/food", async (req, res) => {
+      let foodDetails = req.body;
+
+      let { name } = req.query;
+
+      let verifyIfBlacklisted = await blacklistsCollection.findOne({
+        restaurant: name,
+      });
+
+      if (verifyIfBlacklisted) {
+        return res.send({ success: false });
+      }
+
+      let convertedPrice = parseInt(foodDetails.price);
+
+      foodDetails.price = convertedPrice;
+
+      await foodsCollection.insertOne(foodDetails);
+
+      res.send({ success: true });
+    });
+
+    // Get foods offered by individual restaurants
+    app.get("/offered/foods", async (req, res) => {
+      let restaurantName = req.query.restaurant;
+
+      let foods = await foodsCollection
+        .find({ restaurant: restaurantName })
+        .toArray();
+
+      res.send(foods);
+    });
+
+    // Update food details
+    app.post("/update/food", async (req, res) => {
+      let id = req.query.id;
+      let updatedDetails = req.body;
+
+      const objectId = new ObjectId(id);
+
+      const result = await foodsCollection.updateOne(
+        { _id: objectId },
+        { $set: updatedDetails }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Delete food
+    app.post("/delete/food", async (req, res) => {
+      let id = req.query.id;
+      const objectId = new ObjectId(id);
+      await foodsCollection.deleteOne({ _id: objectId });
+      res.send({ success: true });
+    });
+
+    // Get incoming delivery data for rider
+    app.get("/deliveries/incoming", async (req, res) => {
+      const region = req.query.region;
+
+      // Filter documents by region
+      const result = await ordersCollection.find({ region: region }).toArray();
+
+      // Create an array to store all objects from cartFood and burger arrays with status "cooking"
+      let incomingDeliveries = [];
+
+      // Loop through each document
+      result.forEach((order) => {
+        // Add objects from cartFood array with status "cooking" and isAcceptedByRider: false
+        if (order.cartFood && order.cartFood.length > 0) {
+          incomingDeliveries = incomingDeliveries.concat(
+            order.cartFood
+              .filter(
+                (item) =>
+                  item.status === "cooking" && item.isAcceptedByRider === false
+              )
+              .map((item) => ({
+                ...item,
+                paymentMethod: order.paymentMethod,
+                phone: order.phone,
+                address: order.address,
+                orderType: "regular order",
+              }))
+          );
+        }
+        // Add objects from burger array with status "cooking" and isAcceptedByRider: false
+        if (order.burger && order.burger.length > 0) {
+          incomingDeliveries = incomingDeliveries.concat(
+            order.burger
+              .filter(
+                (item) =>
+                  item.status === "cooking" && item.isAcceptedByRider === false
+              )
+              .map((item) => ({
+                ...item,
+                paymentMethod: order.paymentMethod,
+                restaurant: item.provider,
+                phone: order.phone,
+                address: order.address,
+                orderType: "custom burger",
+              }))
+          );
+        }
+      });
+
+      res.send(incomingDeliveries);
+    });
+
+    // Accept a delivery as a rider
+    app.post("/accept/delivery", async (req, res) => {
+      const orderId = req.query.orderId;
+      const type = req.query.type;
+      const riderName = req.query.riderName;
+
+      let updateQuery = {};
+      if (type === "regular order") {
+        updateQuery = {
+          $set: {
+            "cartFood.$[item].isAcceptedByRider": `accepted by ${riderName}`,
+          },
+        };
+      } else if (type === "custom burger") {
+        updateQuery = {
+          $set: {
+            "burger.$[item].isAcceptedByRider": `accepted by ${riderName}`,
+          },
+        };
+      }
+
+      const filter = {
+        $or: [{ "cartFood.orderId": orderId }, { "burger.orderId": orderId }],
+      };
+      const options = {
+        arrayFilters: [{ "item.orderId": orderId }],
+      };
+
+      const result = await ordersCollection.updateOne(
+        filter,
+        updateQuery,
+        options
+      );
+
+      res.send({ success: true });
+    });
+
+    // Get accepted deliveries for a rider
+    app.get("/deliveries/accepted", async (req, res) => {
+      const riderName = req.query.riderName;
+
+      // Query the ordersCollection to find accepted deliveries for the rider
+      const result = await ordersCollection
+        .find({
+          $or: [
+            { "cartFood.isAcceptedByRider": `accepted by ${riderName}` },
+            { "burger.isAcceptedByRider": `accepted by ${riderName}` },
+          ],
+        })
+        .toArray();
+
+      // Extract and combine the accepted deliveries from both cartFood and burger arrays
+      const acceptedDeliveries = result.reduce((acc, order) => {
+        if (order.cartFood) {
+          acc.push(
+            ...order.cartFood
+              .filter(
+                (item) => item.isAcceptedByRider === `accepted by ${riderName}`
+              )
+              .map((item) => ({
+                ...item,
+                restaurant: item.restaurant,
+                address: order.address,
+                phone: order.phone,
+                orderType: "regular order",
+                paymentMethod: order.paymentMethod,
+              }))
+          );
+        }
+        if (order.burger) {
+          acc.push(
+            ...order.burger
+              .filter(
+                (item) => item.isAcceptedByRider === `accepted by ${riderName}`
+              )
+              .map((item) => ({
+                ...item,
+                restaurant: item.provider,
+                address: order.address,
+                phone: order.phone,
+                orderType: "custom burger",
+                paymentMethod: order.paymentMethod,
+              }))
+          );
+        }
+        return acc;
+      }, []);
+
+      res.send(acceptedDeliveries);
+    });
+
+    // Deliver order to the customer
+    app.post("/deliver/food", async (req, res) => {
+      const orderId = req.query.orderId;
+      const type = req.query.type;
+      const riderName = req.query.riderName;
+
+      let updateQuery = {};
+      if (type === "regular order") {
+        updateQuery = {
+          $set: {
+            "cartFood.$[item].isAcceptedByRider": `delivered by ${riderName}`,
+            "cartFood.$[item].status": `completed`,
+          },
+        };
+      } else if (type === "custom burger") {
+        updateQuery = {
+          $set: {
+            "burger.$[item].isAcceptedByRider": `delivered by ${riderName}`,
+            "burger.$[item].status": `completed`,
+          },
+        };
+      }
+
+      const filter = {
+        $or: [{ "cartFood.orderId": orderId }, { "burger.orderId": orderId }],
+      };
+      const options = {
+        arrayFilters: [{ "item.orderId": orderId }],
+      };
+
+      const result = await ordersCollection.updateOne(
+        filter,
+        updateQuery,
+        options
+      );
+
+      await ridersCollection.findOneAndUpdate(
+        { name: riderName },
+        { $inc: { totalDelivered: 1, totalEarned: 50 } },
+        { returnOriginal: false }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Insert user review to the database
+    app.post("/submit/review", async (req, res) => {
+      let data = req.body;
+
+      await ordersCollection.updateOne(
+        {
+          "cartFood.orderId": data.orderId,
+        },
+        {
+          $set: {
+            "cartFood.$.reviewed": true,
+          },
+        }
+      );
+
+      await reviewsCollection.insertOne({
+        identifier: data.identifier,
+        review: data.review,
+        rating: data.rating,
+        userName: data.user,
+        profileImage: data.profileImage,
+        restaurant: data.restaurant,
+        date: data.date,
+      });
+
+      res.send({ success: true });
+    });
+
+    // Get vendor specific reviews
+    app.get("/reviews/for-vendor", async (req, res) => {
+      let { restaurant } = req.query;
+      console.log(restaurant);
+
+      let result = await reviewsCollection.find({ restaurant }).toArray();
+
+      res.send(result);
+    });
+
+    // Get all reviews for a specific food
+    app.get("/reviews/foods", async (req, res) => {
+      let id = req.query.id;
+      let results = await reviewsCollection.find({ identifier: id }).toArray();
+      res.send(results);
+    });
+
+    // Send verification code to user gmail
+    app.post("/send/verificationCode", async (req, res) => {
+      let email = req.body.email;
+      let name = req.body.name;
+
+      function verificationCode() {
+        const characters =
+          "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let result = "";
+        for (let i = 0; i < 10; i++) {
+          const randomIndex = Math.floor(Math.random() * characters.length);
+          result += characters.charAt(randomIndex);
+        }
+        return result;
+      }
+
+      const code = verificationCode();
+
+      await SendVerificationCode(email, name, code);
+
+      await verifiedEmailsCollection.insertOne({
+        email: email,
+        verificationCode: code,
+        isVerified: false,
+      });
+
+      res.send({ success: true });
+    });
+
+    // Verify user gmail and change status
+    app.post("/verify/gmail", async (req, res) => {
+      let verificationCode = req.body.verificationCode;
+
+      let emailToVerify = await verifiedEmailsCollection.findOne({
+        verificationCode: verificationCode,
+      });
+
+      if (!emailToVerify) {
+        return res.send({ error: "email not found" });
+      } else if (emailToVerify.isVerified === true) {
+        return res.send({ error: "email already verified" });
+      }
+
+      await verifiedEmailsCollection.findOneAndUpdate(
+        { verificationCode: verificationCode },
+        { $set: { isVerified: true } }
+      );
+
+      res.send({ success: true });
+    });
+
+    // Check if user gmail is verified
+    app.post("/check/verificationStatus", async (req, res) => {
+      let email = req.body.email;
+
+      let emailToCheck = await verifiedEmailsCollection.findOne({
+        email: email,
+      });
+
+      if (!emailToCheck) {
+        return res.send({ status: "unregistered user" });
+      } else if (emailToCheck.isVerified === false) {
+        return res.send({ status: "not verified yet" });
+      } else {
+        return res.send({ status: "verified" });
+      }
+    });
+
+    // Create new coupon
+    app.post("/create-offer", async (req, res) => {
+      const foodId = await offersCollection.findOne({
+        "selectedFood._id": req.body.selectedFood._id,
+      });
+
+      if (!foodId) {
+        req.body.expiresIn = new Date(req.body.expiresIn);
+        await offersCollection.insertOne(req.body);
+      }
+
+      if (foodId?.selectedFood?._id === req.body.selectedFood._id) {
+        return res.json({
+          success: false,
+          message: "There is already an active coupon for this food!!",
+        });
+      }
+
+      return res.send({ success: true });
+    });
+
+    // Get coupons for individual vendors
+    app.get("/get-coupons", async (req, res) => {
+      if (req.query.allCoupons) {
+        const result = await offersCollection.find().toArray();
+        return res.send(result);
+      }
+
+      if (req.query.restaurant) {
+        const result = await offersCollection
+          .find({
+            restaurant: req.query.restaurant,
+          })
+          .toArray();
+
+        return res.send(result);
+      }
+
+      if (req.query.foodId) {
+        const result = await offersCollection.findOne({
+          "selectedFood._id": req.query.foodId,
+        });
+
+        console.log(result);
+
+        return res.send(result);
+      }
+
+      return res.send({ success: false });
+    });
+
+    // Delete an offer
+    app.delete("/delete-coupon", async (req, res) => {
+      await offersCollection.deleteOne({
+        _id: new ObjectId(req.query.id),
+      });
+
+      return res.send({ success: true });
+    });
+
+    // Apply coupon
+    app.post("/apply-coupon", async (req, res) => {
+      let email = req.query.email;
+      let couponId = req.query.couponId;
+
+      let coupon = await offersCollection.findOne({
+        _id: new ObjectId(couponId),
+      });
+
+      let alreadyApplied = coupon.couponUsedBy.some(
+        (user) => user.email === email
+      );
+
+      if (alreadyApplied) {
+        return res.send({
+          success: false,
+          message: "Coupon already used by this user",
+        });
+      }
+
+      await offersCollection.updateOne(
+        { _id: new ObjectId(couponId) },
+        { $push: { couponUsedBy: { email } } }
+      );
+
+      return res.send({ success: true });
+    });
+
+    // Foolow/unfollow shop
+    app.post("/follow/shop", async (req, res) => {
+      try {
+        const { email } = req.body;
+
+        // Check if the email already exists in the collection
+        const checkIfExists = await followersCollection.findOne({ email });
+
+        if (checkIfExists) {
+          // If it exists, delete the record and send an unfollow response
+          await followersCollection.deleteOne({ email });
+          return res.status(200).send({ message: "Successfully Unfollowed!!" });
+        }
+
+        // If it doesn't exist, insert a new record and send a follow response
+        await followersCollection.insertOne(req.body);
+        return res.status(200).send({ message: "Successfully Followed!!" });
+      } catch (error) {
+        console.error("Error in follow/unfollow API:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    // get follow data
+    app.get("/follow/shop", async (req, res) => {
+      let result = await followersCollection
+        .find({ restaurant: req.query.restaurant })
+        .toArray();
+
+      res.send(result);
+    });
+
+    // Blacklist/remove blacklist vendor
+    app.post("/blacklist/vendor", async (req, res) => {
+      try {
+        const { restaurant } = req.body;
+
+        // Check if the vendor already exists in the collection
+        const checkIfExists = await blacklistsCollection.findOne({
+          restaurant,
+        });
+
+        if (checkIfExists) {
+          // If it exists, delete the record and send an unfollow response
+          await blacklistsCollection.deleteOne({ restaurant });
+          return res
+            .status(200)
+            .send({ message: "Successfully removed from blacklist!!" });
+        }
+
+        // If it doesn't exist, insert a new record
+        await blacklistsCollection.insertOne(req.body);
+        return res.status(200).send({
+          message:
+            "Successfully blacklisted. This vendor will no longer be able to add new food or accept orders from orders option.",
+        });
+      } catch (error) {
+        console.error("Error in API:", error);
+        res.status(500).send({ error: "Internal Server Error" });
+      }
+    });
+
+    // get blacklist data
+    app.get("/blacklist/list", async (req, res) => {
+      let result = await blacklistsCollection.find().toArray();
+
+      res.send(result);
     });
 
     console.log(
