@@ -89,6 +89,10 @@ async function run() {
     .db("DineDash-Ecom")
     .collection("blacklist");
 
+  const subscribersCollection = client
+    .db("DineDash-Ecom")
+    .collection("subscribers");
+
   offersCollection.createIndex({ expiresIn: 1 }, { expireAfterSeconds: 0 });
 
   try {
@@ -170,8 +174,31 @@ async function run() {
 
     // Get Restaurents for homepage slider
     app.get("/restaurants", async (req, res) => {
-      const result = await restaurantsCollection.find().toArray();
-      res.send(result);
+      try {
+        // Fetch the list of restaurants
+        const restaurants = await restaurantsCollection.find().toArray();
+
+        // Loop through each restaurant to fetch food items and add totalFoods field
+        const result = await Promise.all(
+          restaurants.map(async (restaurant) => {
+            // Query the foodsCollection for the food items that belong to this restaurant
+            const foods = await foodsCollection
+              .find({ restaurant: restaurant.name })
+              .toArray();
+
+            // Add the totalFoods field to the restaurant object
+            restaurant.totalFoods = foods.length;
+
+            return restaurant; // Return the modified restaurant object
+          })
+        );
+
+        // Send the modified list of restaurants
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Error fetching data");
+      }
     });
 
     // Get All riders for admin overview
@@ -1414,6 +1441,37 @@ async function run() {
     // get blacklist data
     app.get("/blacklist/list", async (req, res) => {
       let result = await blacklistsCollection.find().toArray();
+
+      res.send(result);
+    });
+
+    // insert into subscribers
+    app.post("/subscribers", async (req, res) => {
+      let isAlreadyExists = await subscribersCollection.findOne({
+        email: req.body.email,
+      });
+
+      if (isAlreadyExists) {
+        return res.send({ message: "already exists" });
+      }
+
+      await subscribersCollection.insertOne(req.body);
+
+      res.send({ message: "success" });
+    });
+
+    // get all subscribers
+    app.get("/subscribers", async (req, res) => {
+      let result = await subscribersCollection.find().toArray();
+
+      res.send(result);
+    });
+
+    // Delete subscriber
+    app.delete("/delete-subscription", async (req, res) => {
+      let result = await subscribersCollection.deleteOne({
+        _id: new ObjectId(req.body.id),
+      });
 
       res.send(result);
     });
